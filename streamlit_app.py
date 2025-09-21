@@ -432,8 +432,60 @@ if "bm25" not in st.session_state:
             st.success("✅ All components loaded successfully!")
             
         except FileNotFoundError as e:
-            st.error(f"❌ Missing required files. Please run model_enhanced.py first. Error: {e}")
-            st.stop()
+            st.warning("🔄 Model files not found. Building models from scratch...")
+            
+            # Import the model building function
+            import subprocess
+            import sys
+            
+            # Run the model building process
+            with st.spinner("Building search models... This may take 5-10 minutes on first run."):
+                try:
+                    # Generate dummy data first
+                    st.info("📊 Generating dummy data...")
+                    subprocess.run([sys.executable, "generate_dummy_data.py"], check=True)
+                    
+                    # Build the models
+                    st.info("🧠 Building search models...")
+                    subprocess.run([sys.executable, "model.py"], check=True)
+                    
+                    # Reload the models
+                    st.info("🔄 Loading models...")
+                    with open("pkl_files/bm25.pkl", "rb") as f:
+                        st.session_state.bm25 = pickle.load(f)
+                    with open("pkl_files/tokenized_docs.pkl", "rb") as f:
+                        st.session_state.tokenized_docs = pickle.load(f)
+                    with open("pkl_files/embeddings.pkl", "rb") as f:
+                        st.session_state.doc_embeddings = pickle.load(f)
+                    with open("pkl_files/cleaned_df.pkl", "rb") as f:
+                        st.session_state.df = pickle.load(f)
+                    with open("pkl_files/tfidf_vectorizer.pkl", "rb") as f:
+                        st.session_state.tfidf_vectorizer = pickle.load(f)
+                    with open("pkl_files/tfidf_matrix.pkl", "rb") as f:
+                        st.session_state.tfidf_matrix = pickle.load(f)
+                    
+                    # Load enhanced components
+                    try:
+                        with open("pkl_files/query_expander.pkl", "rb") as f:
+                            st.session_state.query_expander = pickle.load(f)
+                    except:
+                        st.session_state.query_expander = None
+                    
+                    try:
+                        with open("pkl_files/analytics.pkl", "rb") as f:
+                            st.session_state.analytics = pickle.load(f)
+                    except:
+                        st.session_state.analytics = None
+                    
+                    st.session_state.model = SentenceTransformer("all-MiniLM-L6-v2")
+                    st.success("✅ Models built and loaded successfully!")
+                    
+                except subprocess.CalledProcessError as build_error:
+                    st.error(f"❌ Failed to build models: {build_error}")
+                    st.stop()
+                except Exception as load_error:
+                    st.error(f"❌ Failed to load models: {load_error}")
+                    st.stop()
 
 # Assign to working variables
 bm25 = st.session_state.bm25
