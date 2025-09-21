@@ -467,9 +467,82 @@ if "bm25" not in st.session_state:
                     
                     # Load and process data
                     st.info("🔄 Processing data...")
-                    from model import load_and_clean_data, build_bm25_index, build_tfidf_index, compute_embeddings_for_df
+                    from model import extract_columns, clean_data, create_document_clusters, build_bm25_index, build_tfidf_index, compute_embeddings_for_df
                     
-                    df_cleaned = load_and_clean_data()
+                    # Load data (replicating main function logic)
+                    frames = []
+                    file_mappings = {
+                        "bug_reports.csv": {
+                            "encoding": "utf-8",
+                            "mapping": {
+                                "ID": "ID",
+                                "Name": "Name", 
+                                "Description": "Description",
+                                "Cause": "Cause",
+                                "Solution": "Solution",
+                                "Verification": "Verification",
+                                "Deferral Justification": "Deferral Justification",
+                                "Issue Key": "Issue Key",
+                                "Area": "Area",
+                                "Rationale": "Rationale",
+                                "Application": "Application",
+                                "Teams": "Teams",
+                                "Tags": "Tags",
+                            },
+                        },
+                        "feature_requests.csv": {
+                            "encoding": "utf-8",
+                            "mapping": {
+                                "ID": "ID",
+                                "Name": "Name",
+                                "Description": "Description",
+                                "Cause": "Cause",
+                                "Solution": "Solution",
+                                "Verification": "Verification",
+                                "Deferral Justification": "Deferral Justification",
+                                "Issue Key": "Issue Key",
+                                "Area": "Area",
+                                "Rationale": "Rationale",
+                                "Application": "Application",
+                                "Teams": "Teams",
+                                "Tags": "Tags",
+                            },
+                        },
+                        "incidents.csv": {
+                            "encoding": "utf-8",
+                            "mapping": {
+                                "ID": "ID",
+                                "Name": "Name",
+                                "Description": "Description",
+                                "Cause": "Cause",
+                                "Solution": "Solution",
+                                "Verification": "Verification",
+                                "Deferral Justification": "Deferral Justification",
+                                "Issue Key": "Issue Key",
+                                "Area": "Area",
+                                "Rationale": "Rationale",
+                                "Application": "Application",
+                                "Teams": "Teams",
+                                "Tags": "Tags",
+                            },
+                        }
+                    }
+                    final_columns = ["ID", "Name", "Description", "Cause", "Solution", "Verification", "Deferral Justification", "Issue Key", "Area", "Rationale", "Application", "Teams", "Tags"]
+                    
+                    for filename, config in file_mappings.items():
+                        path = os.path.join("rawData", filename)
+                        if os.path.exists(path):
+                            df = pd.read_csv(path, encoding=config["encoding"])
+                            extracted = extract_columns(df, config["mapping"], final_columns)
+                            frames.append(extracted)
+                    
+                    if not frames:
+                        st.error("No valid files found in rawData/")
+                        st.stop()
+                    
+                    df_combined = pd.concat(frames, ignore_index=True)
+                    df_cleaned = clean_data(df_combined)
+                    df_cleaned = create_document_clusters(df_cleaned)
                     
                     # Build BM25 index
                     st.info("🔍 Building BM25 index...")

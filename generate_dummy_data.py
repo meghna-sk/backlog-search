@@ -331,14 +331,13 @@ def create_csv_files(records):
     # Split records into different files
     bug_reports = [r for r in records if r.get("Cause") is not None]
     feature_requests = [r for r in records if r.get("Rationale") is not None and r.get("Cause") is None]
-    requirements = [r for r in records if r.get("Rationale") is not None and r.get("Cause") is None and r.get("Deferral Justification") is None]
+    incidents = [r for r in records if r.get("Cause") is not None and r.get("Rationale") is None]
     
-    # Create different CSV files
+    # Create different CSV files that match what model.py expects
     files_to_create = [
         ("bug_reports.csv", bug_reports[:len(bug_reports)//2]),
         ("feature_requests.csv", feature_requests[:len(feature_requests)//2]),
-        ("requirements.csv", requirements),
-        ("mixed_documents.csv", records[len(records)//2:])  # Second half as mixed
+        ("incidents.csv", incidents[:len(incidents)//2]),
     ]
     
     for filename, data in files_to_create:
