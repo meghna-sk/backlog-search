@@ -434,57 +434,87 @@ if "bm25" not in st.session_state:
         except FileNotFoundError as e:
             st.warning("🔄 Model files not found. Building models from scratch...")
             
-            # Import the model building function
-            import subprocess
-            import sys
+            # Import required modules for model building
+            import os
+            import pandas as pd
+            import numpy as np
+            import re
+            import nltk
+            from rank_bm25 import BM25Okapi
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            from sklearn.metrics.pairwise import cosine_similarity
             
-            # Run the model building process
+            # Ensure required directories exist
+            os.makedirs("rawData", exist_ok=True)
+            os.makedirs("cleanedData", exist_ok=True)
+            os.makedirs("pkl_files", exist_ok=True)
+            os.makedirs("analytics", exist_ok=True)
+            
+            # Download NLTK data
+            nltk.download("punkt", quiet=True)
+            nltk.download("stopwords", quiet=True)
+            nltk.download("wordnet", quiet=True)
+            
+            # Build models directly
             with st.spinner("Building search models... This may take 5-10 minutes on first run."):
                 try:
-                    # Generate dummy data first
+                    # Generate dummy data
                     st.info("📊 Generating dummy data...")
-                    subprocess.run([sys.executable, "generate_dummy_data.py"], check=True)
+                    from generate_dummy_data import generate_dummy_data, create_csv_files
                     
-                    # Build the models
-                    st.info("🧠 Building search models...")
-                    subprocess.run([sys.executable, "model.py"], check=True)
+                    records = generate_dummy_data(25000)  # Smaller dataset for faster deployment
+                    create_csv_files(records)
                     
-                    # Reload the models
-                    st.info("🔄 Loading models...")
-                    with open("pkl_files/bm25.pkl", "rb") as f:
-                        st.session_state.bm25 = pickle.load(f)
-                    with open("pkl_files/tokenized_docs.pkl", "rb") as f:
-                        st.session_state.tokenized_docs = pickle.load(f)
-                    with open("pkl_files/embeddings.pkl", "rb") as f:
-                        st.session_state.doc_embeddings = pickle.load(f)
-                    with open("pkl_files/cleaned_df.pkl", "rb") as f:
-                        st.session_state.df = pickle.load(f)
-                    with open("pkl_files/tfidf_vectorizer.pkl", "rb") as f:
-                        st.session_state.tfidf_vectorizer = pickle.load(f)
-                    with open("pkl_files/tfidf_matrix.pkl", "rb") as f:
-                        st.session_state.tfidf_matrix = pickle.load(f)
+                    # Load and process data
+                    st.info("🔄 Processing data...")
+                    from model import load_and_clean_data, build_bm25_index, build_tfidf_index, compute_embeddings_for_df
                     
-                    # Load enhanced components
-                    try:
-                        with open("pkl_files/query_expander.pkl", "rb") as f:
-                            st.session_state.query_expander = pickle.load(f)
-                    except:
-                        st.session_state.query_expander = None
+                    df_cleaned = load_and_clean_data()
                     
-                    try:
-                        with open("pkl_files/analytics.pkl", "rb") as f:
-                            st.session_state.analytics = pickle.load(f)
-                    except:
-                        st.session_state.analytics = None
+                    # Build BM25 index
+                    st.info("🔍 Building BM25 index...")
+                    documents = df_cleaned['combined_text'].tolist()
+                    bm25, tokenized_docs = build_bm25_index(documents)
                     
-                    st.session_state.model = SentenceTransformer("all-MiniLM-L6-v2")
+                    # Build TF-IDF index
+                    st.info("📊 Building TF-IDF index...")
+                    tfidf_vectorizer, tfidf_matrix = build_tfidf_index(documents)
+                    
+                    # Build semantic embeddings
+                    st.info("🧠 Building semantic embeddings...")
+                    model = SentenceTransformer("all-MiniLM-L6-v2")
+                    doc_embeddings = compute_embeddings_for_df(df_cleaned, model, chunk_size=200, pooling='mean')
+                    
+                    # Save all models
+                    st.info("💾 Saving models...")
+                    with open("pkl_files/bm25.pkl", "wb") as f:
+                        pickle.dump(bm25, f)
+                    with open("pkl_files/tokenized_docs.pkl", "wb") as f:
+                        pickle.dump(tokenized_docs, f)
+                    with open("pkl_files/embeddings.pkl", "wb") as f:
+                        pickle.dump(doc_embeddings, f)
+                    with open("pkl_files/cleaned_df.pkl", "wb") as f:
+                        pickle.dump(df_cleaned, f)
+                    with open("pkl_files/tfidf_vectorizer.pkl", "wb") as f:
+                        pickle.dump(tfidf_vectorizer, f)
+                    with open("pkl_files/tfidf_matrix.pkl", "wb") as f:
+                        pickle.dump(tfidf_matrix, f)
+                    
+                    # Store in session state
+                    st.session_state.bm25 = bm25
+                    st.session_state.tokenized_docs = tokenized_docs
+                    st.session_state.doc_embeddings = doc_embeddings
+                    st.session_state.df = df_cleaned
+                    st.session_state.tfidf_vectorizer = tfidf_vectorizer
+                    st.session_state.tfidf_matrix = tfidf_matrix
+                    st.session_state.model = model
+                    st.session_state.query_expander = None
+                    st.session_state.analytics = None
+                    
                     st.success("✅ Models built and loaded successfully!")
                     
-                except subprocess.CalledProcessError as build_error:
+                except Exception as build_error:
                     st.error(f"❌ Failed to build models: {build_error}")
-                    st.stop()
-                except Exception as load_error:
-                    st.error(f"❌ Failed to load models: {load_error}")
                     st.stop()
 
 # Assign to working variables
