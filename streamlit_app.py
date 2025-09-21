@@ -19,7 +19,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Download NLTK data
-nltk.download("punkt", quiet=True)
+nltk.download("punkt_tab", quiet=True)
 nltk.download("stopwords", quiet=True)
 nltk.download("wordnet", quiet=True)
 
@@ -451,7 +451,7 @@ if "bm25" not in st.session_state:
             os.makedirs("analytics", exist_ok=True)
             
             # Download NLTK data
-            nltk.download("punkt", quiet=True)
+            nltk.download("punkt_tab", quiet=True)
             nltk.download("stopwords", quiet=True)
             nltk.download("wordnet", quiet=True)
             
