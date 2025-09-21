@@ -398,6 +398,15 @@ if "user_preferences" not in st.session_state:
         'show_analytics': True
     }
 
+if "last_search_results" not in st.session_state:
+    st.session_state.last_search_results = None
+
+if "last_search_query" not in st.session_state:
+    st.session_state.last_search_query = None
+
+if "preserve_results" not in st.session_state:
+    st.session_state.preserve_results = False
+
 # ------------------------- LOAD FILES (only once) -------------------------
 if "bm25" not in st.session_state:
     with st.spinner("Loading advanced search components..."):
@@ -605,7 +614,6 @@ analytics = st.session_state.analytics
 st.markdown("""
 <div class="header-container">
     <h1 class="header-title">🔍 Smart Backlog Search Engine</h1>
-    <p class="header-subtitle">Find exactly what you need with AI-powered search</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -715,6 +723,37 @@ with st.sidebar:
     
     # Analytics toggle
     show_analytics = st.checkbox("Show Analytics", value=True)
+    
+    # Recent searches section in sidebar
+    st.markdown("---")
+    st.markdown("### 📚 Recent Searches")
+    
+    if st.session_state.search_history:
+        # Add clear all button
+        if st.button("🗑️ Clear All", key="clear_all_history", type="secondary", use_container_width=True):
+            st.session_state.search_history = []
+            st.rerun()
+        
+        # Display recent searches (limit to 5 most recent)
+        for i, search in enumerate(st.session_state.search_history[-5:]):
+            # Create columns for search and remove buttons
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                if st.button(f"🔍 {search[:25]}{'...' if len(search) > 25 else ''}", 
+                           key=f"history_{i}", 
+                           use_container_width=True,
+                           help=f"Search for: {search}"):
+                    st.session_state["last_query"] = search
+                    st.session_state["search_triggered"] = True
+                    st.rerun()
+            
+            with col2:
+                if st.button("×", key=f"remove_{i}", help="Remove this search"):
+                    st.session_state.search_history.remove(search)
+                    st.rerun()
+    else:
+        st.info("No recent searches yet. Start searching to see your history here!")
 
 # ------------------------- MAIN SEARCH INTERFACE -------------------------
 col1, col2 = st.columns([4, 1])
@@ -731,45 +770,12 @@ with col2:
     st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)  # Align with input
     search_button = st.button("🔍 Search", type="primary", use_container_width=True)
 
-# Recent searches section - moved below search bar
-if st.session_state.search_history:
-    st.markdown("### 📚 Recent Searches")
-    
-    # Add clear all button with orange styling
-    if st.button("🗑️ Clear All", key="clear_all_history", type="secondary"):
-        st.session_state.search_history = []
-        st.rerun()
-    
-    for i, search in enumerate(st.session_state.search_history[-5:]):
-        # Create search and remove buttons side by side
-        col1, col2 = st.columns([4, 1])
-        
-        with col1:
-            if st.button(f"🔍 {search}", key=f"history_{i}"):
-                st.session_state["last_query"] = search
-                st.session_state["search_triggered"] = True
-                st.rerun()
-        
-        with col2:
-            if st.button("×", key=f"remove_{i}", help="Remove this search"):
-                st.session_state.search_history.remove(search)
-                st.rerun()
-    
-    st.markdown("---")  # Add separator after recent searches
 
-# Show search suggestions
-if query and len(query) > 2:
-    suggestions = get_search_suggestions(query, analytics.get_popular_queries() if analytics else [])
-    if suggestions:
-        st.markdown("### 💡 Suggestions")
-        for suggestion in suggestions:
-            if st.button(f"💡 {suggestion}", key=f"suggestion_{suggestion}"):
-                st.session_state["last_query"] = suggestion
-                st.session_state["search_triggered"] = True
-                st.rerun()
 
 # ------------------------- SEARCH LOGIC -------------------------
 if search_button or st.session_state.get("search_triggered", False):
+    # Reset preserve flag when performing new search
+    st.session_state.preserve_results = False
     if query or st.session_state.get("last_query"):
         # Use the query from session state if available
         search_query = st.session_state.get("last_query", query)
@@ -859,6 +865,10 @@ if search_button or st.session_state.get("search_triggered", False):
                 results_df = df.iloc[valid_indices].copy()
                 results_df["Similarity Score"] = final_scores[valid_indices]
                 results_df = results_df.reset_index(drop=True)
+                
+                # Store results in session state
+                st.session_state.last_search_results = results_df
+                st.session_state.last_search_query = search_query
 
                 # Display search stats
                 col1, col2, col3, col4 = st.columns(4)
@@ -930,6 +940,7 @@ if search_button or st.session_state.get("search_triggered", False):
                         toggle_label = "📖 Show Details" if not st.session_state.expand_states.get(i, False) else "📖 Hide Details"
                         if st.button(toggle_label, key=f"toggle_{i}"):
                             st.session_state.expand_states[i] = not st.session_state.expand_states.get(i, False)
+                            st.session_state.preserve_results = True
                             st.rerun()
                         
                         if st.session_state.expand_states.get(i, False):
@@ -970,6 +981,116 @@ if search_button or st.session_state.get("search_triggered", False):
                     <p>Try adjusting your search terms or filters</p>
                 </div>
                 """, unsafe_allow_html=True)
+
+# Display stored search results if they exist and no new search was performed
+elif st.session_state.last_search_results is not None and (st.session_state.preserve_results or not (search_button or st.session_state.get("search_triggered", False))):
+    results_df = st.session_state.last_search_results
+    search_query = st.session_state.last_search_query
+    
+    # Display search stats
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Results Found", len(results_df))
+    with col2:
+        st.metric("Last Query", search_query[:30] + "..." if len(search_query) > 30 else search_query)
+    with col3:
+        st.metric("Search Mode", mode)
+    with col4:
+        st.metric("Filters Applied", len(filters))
+    
+    st.markdown("---")
+    
+    # Display results
+    for i, row in results_df.iterrows():
+        with st.container():
+            # Parse tags for display
+            tags_display = ""
+            if pd.notna(row['Tags']) and row['Tags']:
+                tags_list = [tag.strip() for tag in str(row['Tags']).split(',')]
+                tags_html = ""
+                for tag in tags_list:
+                    # Enhanced tag styling with CSS classes
+                    tag_class = "tag-default"
+                    if tag.lower() in ['critical', 'urgent']:
+                        tag_class = "tag-critical"
+                    elif tag.lower() in ['high']:
+                        tag_class = "tag-high"
+                    elif tag.lower() in ['medium']:
+                        tag_class = "tag-medium"
+                    elif tag.lower() in ['low']:
+                        tag_class = "tag-low"
+                    elif tag.lower() in ['database', 'backend']:
+                        tag_class = "tag-database"
+                    elif tag.lower() in ['ui', 'frontend']:
+                        tag_class = "tag-ui"
+                    elif tag.lower() in ['mobile', 'web']:
+                        tag_class = "tag-mobile"
+                    elif tag.lower() in ['security']:
+                        tag_class = "tag-security"
+                    elif tag.lower() in ['performance']:
+                        tag_class = "tag-performance"
+                    
+                    tags_html += f'<span class="tag-pill {tag_class}">{tag}</span>'
+                
+                tags_display = f'<div style="margin-top: 1rem;">{tags_html}</div>'
+            
+            st.markdown(f"""
+            <div class="search-result-card">
+                <div style="display: flex; justify-content: space-between; align-items: start;">
+                    <div style="flex: 1;">
+                        <h4 style="margin: 0 0 0.5rem 0; color: #333;">{row['Name']}</h4>
+                        <p style="margin: 0; color: #666; font-size: 0.9rem;">
+                            <strong>ID:</strong> {row['ID']} | 
+                            <strong>Type:</strong> {row['doc_type']} | 
+                            <strong>Area:</strong> {row['Area'] or 'N/A'}
+                        </p>
+                        {tags_display}
+                    </div>
+                    <div class="similarity-score">
+                        {row['Similarity Score']:.3f}
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Expandable description
+            toggle_label = "📖 Show Details" if not st.session_state.expand_states.get(i, False) else "📖 Hide Details"
+            if st.button(toggle_label, key=f"toggle_{i}"):
+                st.session_state.expand_states[i] = not st.session_state.expand_states.get(i, False)
+                st.session_state.preserve_results = True
+                st.rerun()
+            
+            if st.session_state.expand_states.get(i, False):
+                # Create a clean details section
+                details_content = []
+                
+                if pd.notna(row['Description']) and row['Description']:
+                    details_content.append(f"**Description:** {row['Description']}")
+                
+                if pd.notna(row['Cause']) and row['Cause']:
+                    details_content.append(f"**Cause:** {row['Cause']}")
+                
+                if pd.notna(row['Solution']) and row['Solution']:
+                    details_content.append(f"**Solution:** {row['Solution']}")
+                
+                if pd.notna(row['Verification']) and row['Verification']:
+                    details_content.append(f"**Verification:** {row['Verification']}")
+                
+                if pd.notna(row['Teams']) and row['Teams']:
+                    details_content.append(f"**Team:** {row['Teams']}")
+                
+                if pd.notna(row['Application']) and row['Application']:
+                    details_content.append(f"**Application:** {row['Application']}")
+                
+                if pd.notna(row['Area']) and row['Area']:
+                    details_content.append(f"**Area:** {row['Area']}")
+                
+                if details_content:
+                    st.markdown("---")
+                    for detail in details_content:
+                        st.markdown(detail)
+            
+                st.markdown("---")
 
 # ------------------------- ANALYTICS DASHBOARD -------------------------
 if show_analytics and analytics:
